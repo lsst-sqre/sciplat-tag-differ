@@ -11,7 +11,7 @@ def main() -> None:
     dockerhub=Path("docker.io.contents.json")
 
     ghcr_obj=json.loads(ghcr.read_text())
-    dockerhub_obj=json.loads(ghcr.read_text())
+    dockerhub_obj=json.loads(dockerhub.read_text())
 
     ghcr_tags: dict[str, list[str]] = {}
     dockerhub_tags: dict[str, list[str]] = {}
@@ -20,12 +20,12 @@ def main() -> None:
     dockerhub_shas: dict[str,str] = {}
 
     for sha in ghcr_obj["data"]:
-        ghcr_tags[sha]=deepcopy(ghcr_obj["data"][sha]["tags"])
+        ghcr_tags[sha]=[x for x in ghcr_obj["data"][sha]["tags"]]
         for tag in ghcr_tags[sha]:
             ghcr_shas[tag] = sha
 
     for sha in dockerhub_obj["data"]:
-        dockerhub_tags[sha]=deepcopy(ghcr_obj["data"][sha]["tags"])
+        dockerhub_tags[sha]=[ x for x in dockerhub_obj["data"][sha]["tags"]]
         for tag in dockerhub_tags[sha]:
             dockerhub_shas[tag] = sha
 
@@ -37,19 +37,22 @@ def main() -> None:
     of3.write_text(json.dumps(ghcr_shas, sort_keys=True, indent=2))
     of4 = Path("ghcr-by-sha.json")
     of4.write_text(json.dumps(ghcr_tags, sort_keys=True, indent=2))
-            
-    ghcr_needs: dict[str, list[str]] = tag_compare(ghcr_tags, dockerhub_tags)
+
+    exclude = check_for_conflicts(ghcr_shas, dockerhub_shas)
+    print(f"Problematic tags: {exclude}")
+    
+    ghcr_needs: dict[str, list[str]] = tag_compare(ghcr_tags, dockerhub_tags,
+                                                   exclude)
 
     outfile=Path("ghcr-needs.json")
     outfile.write_text(json.dumps(ghcr_needs, sort_keys=True, indent=2))
 
-def tag_compare(ghcr: dict[str, list[str]], docker: dict[str, list[str]]
+def tag_compare(ghcr: dict[str, list[str]], docker: dict[str, list[str]],
+                exclude: list[str]
                 ) -> dict[str, list[str]]:
     """Find tags in docker.io not at ghcr.io"""
     retval: dict[str, list[str]] = {}
 
-    check_for_conflicts(ghcr, docker)
-    
     for sha in docker:
         print(f"considering {docker[sha]}: {sha}")
         # I think we're going to have to do a pull/push anyway...
@@ -57,6 +60,7 @@ def tag_compare(ghcr: dict[str, list[str]], docker: dict[str, list[str]]
         for tag in docker[sha]:
             print(f"tag: {tag}")
             if ( tag and
+                 tag not in exclude and
                  not tag.startswith("exp_") and
                  not tag.startswith("latest_") and
                  not tag.startswith("recommended") ):
@@ -70,41 +74,34 @@ def tag_compare(ghcr: dict[str, list[str]], docker: dict[str, list[str]]
                     else:
                         print(f"{tag} -> {sha} exists at both places")
             else:
-                print(f"Skipping junk tag '{tag}'")
+                print(f"Skipping tag '{tag}'")
         if need_tags:
-            retval[sha] = need_tags
+            retval[sha] = [t for t in need_tags]
                     
     return retval
 
-def check_for_conflicts(ghcr: dict[str, list[str]],
-                        docker: dict[str, list[str]]) -> None:
-    """See if the same tag has different shas anywhere.  For now,
-    explode if that is the case."""
-    inv_g: dict[str,str] = {}
-    inv_d: dict[str,str] = {}
-    for sha in ghcr:
-        for tag in ghcr[sha]:
-            inv_g[tag] = sha
-    for sha in docker:
-        for tag in docker[sha]:
-            inv_d[tag] = sha
-    for tag in inv_g:
-        if tag not in inv_d:
-            continue
-        if inv_d[tag] == inv_g[tag]:
-            continue
-        raise RuntimeError(
-            f"tag {tag} is {inv_g[tag]} at ghcr but {inv_d[tag]} at docker"
-        )
-    for tag in inv_d:
-        if tag not in inv_g:
-            continue
-        if inv_d[tag] == inv_g[tag]:
-            continue
-        raise RuntimeError(
-            f"tag {tag} is {inv_g[tag]} at ghcr but {inv_d[tag]} at docker"
-        )
-            
+def check_for_conflicts(ghcr: dict[str, str],
+                        docker: dict[str, str]) -> list[str]:
+    """See if the same tag has different shas anywhere.  Return a list of
+    those tags, which will need special handling."""
+    retval: list[str] = []
+    for tag in docker:
+        sha = docker[tag]
+        if tag in ghcr and ghcr[tag] != docker[tag]:
+            print(
+                f"tag {tag} is {ghcr[tag]} at ghcr but {docker[tag]} at docker"
+            )
+        if tag not in retval:
+            retval.append(tag)
+    for tag in ghcr:
+        sha = ghcr[tag]
+        if tag in docker and ghcr[tag] != docker[tag]:
+            print(
+                f"tag {tag} is {ghcr[tag]} at ghcr but {docker[tag]} at docker"
+            )
+        if tag not in retval:
+            retval.append(tag)
+    return retval
     
 if __name__ == "__main__":
     main()
