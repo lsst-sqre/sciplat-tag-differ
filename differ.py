@@ -55,7 +55,10 @@ def main() -> None:
         out_text += (f"docker tag docker.io/lsstsqre/sciplat-lab:{tag} "
                      f"ghcr.io/lsst-sqre/sciplat-lab:{tag}\n")
         out_text += f"docker push ghcr.io/lsst-sqre/sciplat-lab:{tag}\n"
-        out_text += f"docker rmi -f ghcr.io/lsst-sqre/sciplat-lab:{tag}\n\n"
+        out_text += f"docker rmi -f docker.io/lsstsqre/sciplat-lab:{tag}\n"
+        out_text += f"docker rmi -f ghcr.io/lsst-sqre/sciplat-lab:{tag}\n"
+        out_text += "docker image prune -f\n"
+        out_text += "docker builder prune -f\n\n"
         t+=1
 
     for tag in exclude:
@@ -64,7 +67,10 @@ def main() -> None:
         out_text += (f"docker tag docker.io/lsstsqre/sciplat-lab:{tag} "
                      f"ghcr.io/lsst-sqre/sciplat-lab:exp_{tag}_docker_io\n")
         out_text += f"docker push ghcr.io/lsst-sqre/sciplat-lab:exp_{tag}_docker_io\n"
-        out_text += f"docker rmi -f ghcr.io/lsst-sqre/sciplat-lab:exp_{tag}_docker_io\n\n"
+        out_text += f"docker rmi -f docker.io/lsstsqre/sciplat-lab:{tag}\n"
+        out_text += f"docker rmi -f ghcr.io/lsst-sqre/sciplat-lab:exp_{tag}_docker_io\n"
+        out_text += "docker image prune -f\n"
+        out_text += "docker builder prune -f\n\n"
         t +=1
         
     out_text += "# That's all, folks.\n"
