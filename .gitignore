@@ -143,3 +143,4 @@ dockerhub-by-sha.json
 ghcr-by-tag.json
 ghcr-by-sha.json
 ghcr-needs.json
+transfer-tags.sh
